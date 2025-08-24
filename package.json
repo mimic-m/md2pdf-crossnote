@@ -1,0 +1,25 @@
+{
+  "name": "md2pdf-crossnote",
+  "version": "0.1.0",
+  "description": "CLI wrapper using crossnote to convert Markdown to PDF (aim for Markdown Preview Enhanced-like rendering)",
+  "bin": {
+    "md2pdf": "bin/md2pdf"
+  },
+  "scripts": {
+    "build:win": "pkg bin/md2pdf --targets node18-win-x64 --output dist/md2pdf-win.exe",
+    "build:linux": "pkg bin/md2pdf --targets node18-linux-x64 --output dist/md2pdf-linux"
+  },
+  "pkg": {
+    "assets": [
+      "node_modules/crossnote/out/**/*"
+    ]
+  },
+  "dependencies": {
+    "crossnote": "^0.9.15"
+  },
+  "devDependencies": {
+    "pkg": "^5.8.0"
+  },
+  "author": "mimic-m",
+  "license": "MIT"
+}

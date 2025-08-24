@@ -1,0 +1,154 @@
+#!/usr/bin/env node
+
+/**
+ * md2pdf CLI wrapper for crossnote
+ * 
+ * Converts Markdown files to PDF using crossnote library with Markdown Preview Enhanced-like quality.
+ * Features: LaTeX math, Mermaid diagrams, syntax highlighting, and professional PDF output.
+ * 
+ * Usage: md2pdf input.md -o output.pdf [--pdfOptions="{...}"]
+ * 
+ * Requirements:
+ * - Node.js 18+
+ * - Chrome/Chromium browser (for PDF rendering via Puppeteer)
+ */
+
+const fs = require('fs');
+const path = require('path');
+
+async function main() {
+  function printHelp() {
+    console.log('Usage: md2pdf <input.md> -o <output.pdf> [--pdfOptions="{...}"]');
+  }
+
+  // Parse command line arguments
+  const args = process.argv.slice(2);
+  if (args.length === 0) {
+    printHelp();
+    process.exit(1);
+  }
+
+  // Handle version command
+  if (args.includes('-v') || args.includes('--version')) {
+    const packageJson = require('../package.json');
+    console.log(packageJson.version);
+    process.exit(0);
+  }
+
+  let input = null;
+  let output = null;
+  let pdfOptions = {};
+
+  // Process each argument
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    if (!input && !a.startsWith('-')) { 
+      input = a; 
+      continue; 
+    }
+    if (a === '-o' || a === '--output') { 
+      output = args[++i]; 
+      continue; 
+    }
+    if (a.startsWith('--pdfOptions=')) {
+      try {
+        // Parse JSON PDF configuration options
+        pdfOptions = JSON.parse(a.substring(13));
+        
+        // Validate PDF format option
+        if (pdfOptions.format && !['A4', 'Letter', 'Legal'].includes(pdfOptions.format)) {
+          console.error('無効なformat。サポート: A4, Letter, Legal');
+          process.exit(1);
+        }
+      } catch (e) {
+        console.error('pdfOptionsのJSON形式が無効です:', e.message);
+        console.error('例: --pdfOptions=\'{"format":"A4","margin":"12mm"}\'');
+        process.exit(1);
+      }
+      continue;
+    }
+  }
+
+  // Validate required arguments
+  if (!input || !output) {
+    printHelp();
+    process.exit(1);
+  }
+
+  // Validate input file extension
+  if (!input.endsWith('.md') && !input.endsWith('.markdown')) {
+    console.error('入力ファイルはMarkdownファイル(.mdまたは.markdown)である必要があります');
+    process.exit(1);
+  }
+
+  // Verify input file exists
+  if (!fs.existsSync(input)) {
+    console.error('Input file does not exist:', input);
+    process.exit(1);
+  }
+
+  try {
+    // === MAIN CONVERSION PROCESS ===
+    // Uses crossnote for high-quality Markdown to PDF conversion
+    
+    const { Notebook } = require('crossnote');
+    
+    console.log('Converting', input, 'to', output, '(using crossnote)');
+    
+    // Resolve file paths to absolute paths for crossnote
+    const inputPath = path.resolve(input);
+    const outputPath = path.resolve(output);
+    const workingDir = path.dirname(inputPath);
+    
+    // Create output directory if it doesn't exist
+    const outputDir = path.dirname(outputPath);
+    if (!fs.existsSync(outputDir)) {
+      fs.mkdirSync(outputDir, { recursive: true });
+    }
+    
+    // Step 1: Initialize crossnote notebook with optimized configuration
+    // This sets up the rendering environment with KaTeX math, GitHub-style themes
+    const notebook = await Notebook.init({
+      notebookPath: workingDir,
+      config: {
+        mathRenderingOption: "KaTeX",        // Enable LaTeX math rendering
+        codeBlockTheme: "github.css",        // GitHub-style syntax highlighting
+        previewTheme: "github-light.css"     // Clean, professional appearance
+      }
+    });
+    
+    // Step 2: Get the markdown engine instance for our specific file
+    // This creates a processor that understands the file context and working directory
+    const engine = notebook.getNoteMarkdownEngine(inputPath);
+    
+    // Step 3: Export to PDF using Chrome/Puppeteer
+    // This renders the markdown as HTML then converts to PDF with high fidelity
+    await engine.chromeExport({
+      fileType: 'pdf',
+      runAllCodeChunks: false,              // Skip code execution for security
+      outputFilePath: outputPath,
+      pdfConfig: {
+        format: pdfOptions.format || 'A4',  // Default to A4 paper size
+        margin: pdfOptions.margin || { 
+          top: '1in', 
+          right: '1in', 
+          bottom: '1in', 
+          left: '1in' 
+        }
+      }
+    });
+    
+    console.log('✓ PDF created:', output);
+    return;
+    
+  } catch (crossnoteError) {
+    // Handle conversion failures with helpful error messages
+    console.error('Crossnote conversion failed:', crossnoteError.message);
+    console.error('Please ensure Chrome/Chromium is installed and accessible.');
+    console.error('You may need to set CHROME_BIN environment variable if Chrome is not in PATH.');
+    process.exit(1);
+  }
+}
+
+// Execute main function with error handling
+main().catch(console.error);
